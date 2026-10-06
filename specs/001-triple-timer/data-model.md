@@ -11,25 +11,26 @@ order do not vary or depend on user-entered labels.
 
 An integer number of seconds representing a configured or remaining duration.
 
-- Configured duration: integer from 0 through 356,400 seconds (99 hours).
+- Configured duration: integer from 0 through 359,999 seconds (99:59:59).
 - Remaining duration: integer from 0 through configured duration.
 - Input hours: integer from 0 through 99.
 - Input minutes and seconds: integers from 0 through 59.
 - Starting with zero remaining/configured duration is invalid.
-- Display as zero-padded `HH:MM:SS`; hours are at least two digits and may exceed 99 only if the
-  domain maximum is changed deliberately in a future spec.
+- Display as zero-padded `HH:MM:SS`; hours are at least two digits and may not exceed 99.
 
 ### Timer
 
 | Field | Type | Meaning / validation |
 |---|---|---|
 | `id` | TimerId | Fixed identity; exactly one each of DEVELOP, STOP, FIX |
-| `configuredSeconds` | integer | Valid duration, 0–356,400 |
-| `remainingSeconds` | integer | 0–configuredSeconds; never negative |
+| `configuredSeconds` | integer | Valid duration, 0–359,999 |
+| `remainingSeconds` | integer | Display value, `ceil(remainingMilliseconds / 1000)` |
+| `remainingMilliseconds` | finite number | Precise frozen/current duration; 0–configured duration in milliseconds |
 | `status` | TimerStatus | READY, RUNNING, PAUSED, STOPPED, COMPLETED |
 | `startedAtEpochMs` | integer or null | Wall-clock start/reference timestamp while RUNNING |
 | `deadlineEpochMs` | integer or null | Wall-clock target completion timestamp while RUNNING |
 | `startedAtMonotonicMs` | finite number or null | In-session monotonic reference while RUNNING; never relied on after reload |
+| `runStartedRemainingMilliseconds` | finite number or null | Precise snapshot used with the deadlines to reconcile elapsed time; positive and at most the configured duration while RUNNING |
 | `lastStartedAtEpochMs` | integer or null | Used to resolve malformed persisted state containing multiple RUNNING timers |
 
 For non-running states, active start/deadline fields are null. READY normally has remaining equal to
@@ -61,12 +62,12 @@ more than one RUNNING timer.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `schemaVersion` | integer | Current serialized schema version; initial version is 1 |
+| `schemaVersion` | integer | Current serialized schema version; version 2 stores millisecond precision and migrates valid version 1 records |
 | `timers` | tuple/map of three Timer records | One timer for each stable identity |
 | `soundMuted` | boolean | Whether completion audio is suppressed |
 | `updatedAtEpochMs` | integer | Last serialized update, used for diagnostics/recovery validation |
 
-The running timer's own timestamps and remaining snapshot are stored in its Timer record.
+The running timer's own timestamps and millisecond-precision remaining snapshot are stored in its Timer record. Display seconds are rounded up from the precise value; pause/resume retains the fractional remainder rather than introducing time on each cycle.
 There is at most one RUNNING timer. Unknown or incompatible schema versions are rejected and lead
 to defaults; do not partially trust unvalidated input.
 
